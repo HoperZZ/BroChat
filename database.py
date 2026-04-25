@@ -1,6 +1,6 @@
 """
 database.py - работа с Supabase для Streamlit Cloud
-Полностью рабочая версия, бро!
+Полностью рабочая версия с автосозданием админа, бро!
 """
 
 import streamlit as st
@@ -53,11 +53,42 @@ def init_db():
     except Exception as e:
         print(f"Init error: {e}")
 
+def create_admin_if_not_exists():
+    """Принудительное создание админа если его нет"""
+    supabase = get_supabase()
+    if not supabase:
+        print("Supabase not available")
+        return False
+    
+    try:
+        # Проверяем через сырой запрос
+        response = supabase.table('users').select('*').eq('username', 'admin').execute()
+        
+        if not response.data:
+            # Создаём админа с пустым паролем для теста
+            supabase.table('users').insert({
+                'username': 'admin',
+                'password_hash': '',  # Пустой пароль для тестового входа
+                'role': 'admin',
+                'created_at': datetime.now().isoformat()
+            }).execute()
+            print("Admin created! (no password)")
+            return True
+        else:
+            print(f"Admin already exists: {response.data[0]['id']}")
+            return True
+    except Exception as e:
+        print(f"Create admin error: {e}")
+        return False
+
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 def verify_password(password, hashed):
     try:
+        # Если хеш пустой - пускаем без пароля
+        if hashed == "" and password == "":
+            return True
         return bcrypt.checkpw(password.encode(), hashed.encode())
     except:
         return False
@@ -87,6 +118,7 @@ def get_user_by_username(username):
     
     try:
         response = supabase.table('users').select('*').eq('username', username).execute()
+        print(f"DEBUG: Looking for {username}, found: {response.data}")
         return response.data[0] if response.data else None
     except Exception as e:
         print(f"Get user error: {e}")
