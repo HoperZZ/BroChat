@@ -1,11 +1,12 @@
 """
-database.py - работа с Supabase
-Максимально упрощённая версия, бро!
+database.py - работа с Supabase для Streamlit Cloud
+Полностью рабочая версия, бро!
 """
 
 import streamlit as st
 from datetime import datetime
 import bcrypt
+import os
 
 # Пытаемся импортировать Supabase
 try:
@@ -13,7 +14,7 @@ try:
     SUPABASE_AVAILABLE = True
 except ImportError:
     SUPABASE_AVAILABLE = False
-    st.warning("Supabase not installed. Using local mode.")
+    print("Warning: Supabase not installed. Using local mode.")
 
 # Данные подключения
 def get_supabase():
@@ -26,8 +27,8 @@ def get_supabase():
         
         if SUPABASE_URL and SUPABASE_KEY:
             return create_client(SUPABASE_URL, SUPABASE_KEY)
-    except:
-        pass
+    except Exception as e:
+        print(f"Get supabase error: {e}")
     return None
 
 def init_db():
@@ -48,7 +49,7 @@ def init_db():
                 'role': 'admin',
                 'created_at': datetime.now().isoformat()
             }).execute()
-            print("Admin created")
+            print("Admin created: admin / admin123")
     except Exception as e:
         print(f"Init error: {e}")
 
@@ -75,7 +76,8 @@ def create_user(username, password, role='guest'):
             'created_at': datetime.now().isoformat()
         }).execute()
         return response.data[0]['id'] if response.data else None
-    except:
+    except Exception as e:
+        print(f"Create user error: {e}")
         return None
 
 def get_user_by_username(username):
@@ -86,7 +88,8 @@ def get_user_by_username(username):
     try:
         response = supabase.table('users').select('*').eq('username', username).execute()
         return response.data[0] if response.data else None
-    except:
+    except Exception as e:
+        print(f"Get user error: {e}")
         return None
 
 def get_user_by_id(user_id):
@@ -97,7 +100,8 @@ def get_user_by_id(user_id):
     try:
         response = supabase.table('users').select('*').eq('id', user_id).execute()
         return response.data[0] if response.data else None
-    except:
+    except Exception as e:
+        print(f"Get user by id error: {e}")
         return None
 
 def get_all_users():
@@ -108,7 +112,8 @@ def get_all_users():
     try:
         response = supabase.table('users').select('id, username, role, created_at').order('username').execute()
         return response.data if response.data else []
-    except:
+    except Exception as e:
+        print(f"Get all users error: {e}")
         return []
 
 def delete_user(user_id):
@@ -121,7 +126,8 @@ def delete_user(user_id):
         supabase.table('group_members').delete().eq('user_id', user_id).execute()
         supabase.table('users').delete().eq('id', user_id).execute()
         return True
-    except:
+    except Exception as e:
+        print(f"Delete user error: {e}")
         return False
 
 def update_user_role(user_id, new_role):
@@ -132,7 +138,8 @@ def update_user_role(user_id, new_role):
     try:
         supabase.table('users').update({'role': new_role}).eq('id', user_id).execute()
         return True
-    except:
+    except Exception as e:
+        print(f"Update role error: {e}")
         return False
 
 def create_group(name, created_by):
@@ -156,7 +163,8 @@ def create_group(name, created_by):
             }).execute()
             return group_id
         return None
-    except:
+    except Exception as e:
+        print(f"Create group error: {e}")
         return None
 
 def add_user_to_group(group_id, user_id):
@@ -171,7 +179,8 @@ def add_user_to_group(group_id, user_id):
             'joined_at': datetime.now().isoformat()
         }).execute()
         return True
-    except:
+    except Exception as e:
+        print(f"Add to group error: {e}")
         return False
 
 def remove_user_from_group(group_id, user_id):
@@ -182,7 +191,8 @@ def remove_user_from_group(group_id, user_id):
     try:
         supabase.table('group_members').delete().eq('group_id', group_id).eq('user_id', user_id).execute()
         return True
-    except:
+    except Exception as e:
+        print(f"Remove from group error: {e}")
         return False
 
 def get_user_groups(user_id):
@@ -198,7 +208,8 @@ def get_user_groups(user_id):
                 if item.get('groups'):
                     groups.append(item['groups'])
         return groups
-    except:
+    except Exception as e:
+        print(f"Get user groups error: {e}")
         return []
 
 def get_group_members(group_id):
@@ -214,7 +225,8 @@ def get_group_members(group_id):
                 if item.get('users'):
                     members.append(item['users'])
         return members
-    except:
+    except Exception as e:
+        print(f"Get group members error: {e}")
         return []
 
 def get_group_by_id(group_id):
@@ -225,7 +237,8 @@ def get_group_by_id(group_id):
     try:
         response = supabase.table('groups').select('*').eq('id', group_id).execute()
         return response.data[0] if response.data else None
-    except:
+    except Exception as e:
+        print(f"Get group by id error: {e}")
         return None
 
 def get_direct_chat_users(user_id):
@@ -236,7 +249,8 @@ def get_direct_chat_users(user_id):
     try:
         response = supabase.table('users').select('id, username, role').neq('id', user_id).order('username').execute()
         return response.data if response.data else []
-    except:
+    except Exception as e:
+        print(f"Get direct chat users error: {e}")
         return []
 
 def save_message(from_user_id, to_group_id, to_user_id, content, file_path=None):
@@ -255,7 +269,8 @@ def save_message(from_user_id, to_group_id, to_user_id, content, file_path=None)
             'timestamp': datetime.now().isoformat()
         }).execute()
         return response.data[0]['id'] if response.data else None
-    except:
+    except Exception as e:
+        print(f"Save message error: {e}")
         return None
 
 def get_messages(chat_type, chat_id=None, user_id=None, limit=50, offset=0):
@@ -282,7 +297,8 @@ def get_messages(chat_type, chat_id=None, user_id=None, limit=50, offset=0):
         
         messages = response.data if response.data else []
         return messages[::-1]
-    except:
+    except Exception as e:
+        print(f"Get messages error: {e}")
         return []
 
 def get_unread_count(user_id, chat_type, chat_id=None):
@@ -305,7 +321,8 @@ def get_unread_count(user_id, chat_type, chat_id=None):
             return 0
         
         return response.count if hasattr(response, 'count') else 0
-    except:
+    except Exception as e:
+        print(f"Get unread count error: {e}")
         return 0
 
 def mark_messages_as_read(user_id, chat_type, chat_id=None):
@@ -325,7 +342,39 @@ def mark_messages_as_read(user_id, chat_type, chat_id=None):
             supabase.table('messages').update({'is_read': 1}).\
                 eq('to_user_id', user_id).eq('from_user_id', chat_id).eq('is_read', 0).execute()
         return True
-    except:
+    except Exception as e:
+        print(f"Mark as read error: {e}")
         return False
 
+# ========== ФУНКЦИИ ДЛЯ ПРОВЕРКИ ПОДКЛЮЧЕНИЯ ==========
+
+def check_db_connection():
+    """Проверяет подключение к Supabase"""
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return False, "Supabase client not initialized. Check secrets configuration."
+        
+        # Пробуем выполнить простой запрос для проверки подключения
+        supabase.table('users').select('id').limit(1).execute()
+        
+        return True, "Connected to Supabase. Tables exist."
+        
+    except Exception as e:
+        error_msg = str(e)
+        if "API key" in error_msg or "Invalid JWT" in error_msg:
+            return False, "Invalid API key. Check your supabase_key in secrets."
+        elif "relation" in error_msg and "does not exist" in error_msg:
+            return False, "Table 'users' not found. Please create tables in Supabase first."
+        else:
+            return False, f"Connection failed: {error_msg[:100]}"
+
+def get_supabase_url():
+    """Возвращает URL Supabase для отладки"""
+    try:
+        return st.secrets.get("supabase_url", "Not configured")
+    except:
+        return "Secrets not available"
+
+# Константа для совместимости
 DB_NAME = "supabase_cloud"
