@@ -275,12 +275,7 @@ bcrypt developers for security
 
 All contributors and testers
 
-📞 Contact & Support
-Issues: GitHub Issues
 
-Discord: Join our server
-
-Email: support@brochat.com
 
 ⭐ Show Your Support
 If this project helped you, please give it a star on GitHub!
