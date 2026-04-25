@@ -11,6 +11,28 @@ def login_user(username, password):
     Проверяет логин и пароль
     Returns: (success, user_data or error_message)
     """
+    # ========== ТЕСТОВЫЙ РЕЖИМ ==========
+    # Для теста - пускаем admin без пароля!
+    if username == "admin" and password == "":
+        user = get_user_by_username("admin")
+        if user:
+            st.session_state['authenticated'] = True
+            st.session_state['user_id'] = user['id']
+            st.session_state['username'] = user['username']
+            st.session_state['role'] = user['role']
+            return True, user
+    # =====================================
+    
+    # Проверяем подключение к БД
+    db_ok, db_message = check_db_connection()
+    if not db_ok:
+        return False, f"Database connection error: {db_message}"
+
+def login_user(username, password):
+    """
+    Проверяет логин и пароль
+    Returns: (success, user_data or error_message)
+    """
     # Сначала проверяем подключение к БД
     db_ok, db_message = check_db_connection()
     if not db_ok:
