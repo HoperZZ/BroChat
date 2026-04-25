@@ -1,6 +1,6 @@
 """
-database.py - работа с Supabase вместо SQLite
-Бро-версия для облака!
+database.py - работа с Supabase для Streamlit Cloud
+Бро-версия, проверенная!
 """
 
 import streamlit as st
@@ -8,25 +8,32 @@ from supabase import create_client, Client
 from datetime import datetime
 import bcrypt
 import os
+import traceback
 
 # Данные подключения из secrets
-SUPABASE_URL = st.secrets["supabase_url"]
-SUPABASE_KEY = st.secrets["supabase_key"]
+try:
+    SUPABASE_URL = st.secrets["supabase_url"]
+    SUPABASE_KEY = st.secrets["supabase_key"]
+except Exception as e:
+    # Для локальной разработки без secrets
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "https://ezlvrkdnvbiehglruzdo.supabase.co")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 @st.cache_resource
 def get_supabase() -> Client:
     """Возвращает клиент Supabase (кэшируется)"""
+    if not SUPABASE_KEY:
+        st.error("Supabase key not configured! Add secrets in Streamlit Cloud")
+        return None
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def init_db():
-    """Инициализирует таблицы в Supabase через raw SQL"""
-    supabase = get_supabase()
-    
-    # Создаём таблицы (если не существуют)
-    # В Supabase лучше создать таблицы через веб-интерфейс или миграции
-    # Эта функция для проверки существования первого админа
-    
+    """Проверяет соединение и создает админа"""
     try:
+        supabase = get_supabase()
+        if not supabase:
+            return
+        
         # Проверяем, есть ли админ
         response = supabase.table('users').select('*').eq('role', 'admin').limit(1).execute()
         
@@ -39,7 +46,7 @@ def init_db():
                 'role': 'admin',
                 'created_at': datetime.now().isoformat()
             }).execute()
-            print("[OK] Admin created: admin / admin123")
+            print("Admin created: admin / admin123")
     except Exception as e:
         print(f"Init error: {e}")
 
@@ -49,12 +56,18 @@ def hash_password(password):
 
 def verify_password(password, hashed):
     """Проверяет пароль"""
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+    try:
+        return bcrypt.checkpw(password.encode(), hashed.encode())
+    except:
+        return False
 
 def create_user(username, password, role='guest'):
     """Создаёт нового пользователя"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return None
+            
         hashed = hash_password(password)
         
         response = supabase.table('users').insert({
@@ -73,6 +86,9 @@ def get_user_by_username(username):
     """Получает пользователя по логину"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return None
+            
         response = supabase.table('users').select('*').eq('username', username).execute()
         
         if response.data:
@@ -86,6 +102,9 @@ def get_user_by_id(user_id):
     """Получает пользователя по ID"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return None
+            
         response = supabase.table('users').select('*').eq('id', user_id).execute()
         
         if response.data:
@@ -99,6 +118,9 @@ def get_all_users():
     """Список всех пользователей"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return []
+            
         response = supabase.table('users').select('id, username, role, created_at').order('username').execute()
         return response.data if response.data else []
     except Exception as e:
@@ -109,6 +131,8 @@ def delete_user(user_id):
     """Удаляет пользователя и все его данные"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return False
         
         # Удаляем сообщения
         supabase.table('messages').delete().eq('from_user_id', user_id).execute()
@@ -116,7 +140,7 @@ def delete_user(user_id):
         # Удаляем из групп
         supabase.table('group_members').delete().eq('user_id', user_id).execute()
         
-        # Удаляем созданные группы (передаём владение админу)
+        # Переназначаем группы админу
         admin = get_user_by_username('admin')
         if admin:
             supabase.table('groups').update({'created_by': admin['id']}).eq('created_by', user_id).execute()
@@ -133,6 +157,9 @@ def update_user_role(user_id, new_role):
     """Меняет роль пользователя"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return False
+            
         supabase.table('users').update({'role': new_role}).eq('id', user_id).execute()
         return True
     except Exception as e:
@@ -143,7 +170,9 @@ def create_group(name, created_by):
     """Создаёт новую группу"""
     try:
         supabase = get_supabase()
-        
+        if not supabase:
+            return None
+            
         response = supabase.table('groups').insert({
             'name': name,
             'created_by': created_by,
@@ -168,6 +197,9 @@ def add_user_to_group(group_id, user_id):
     """Добавляет пользователя в группу"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return False
+            
         supabase.table('group_members').insert({
             'group_id': group_id,
             'user_id': user_id,
@@ -182,6 +214,9 @@ def remove_user_from_group(group_id, user_id):
     """Удаляет пользователя из группы"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return False
+            
         supabase.table('group_members').delete().eq('group_id', group_id).eq('user_id', user_id).execute()
         return True
     except Exception as e:
@@ -192,6 +227,9 @@ def get_user_groups(user_id):
     """Возвращает все группы пользователя"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return []
+            
         response = supabase.table('group_members').select('groups(*)').eq('user_id', user_id).execute()
         
         groups = []
@@ -208,6 +246,9 @@ def get_group_members(group_id):
     """Список участников группы"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return []
+            
         response = supabase.table('group_members').select('users(id, username, role)').eq('group_id', group_id).execute()
         
         members = []
@@ -224,6 +265,9 @@ def get_group_by_id(group_id):
     """Получает группу по ID"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return None
+            
         response = supabase.table('groups').select('*').eq('id', group_id).execute()
         
         if response.data:
@@ -237,6 +281,9 @@ def get_direct_chat_users(user_id):
     """Возвращает всех пользователей для личных чатов"""
     try:
         supabase = get_supabase()
+        if not supabase:
+            return []
+            
         response = supabase.table('users').select('id, username, role').neq('id', user_id).order('username').execute()
         return response.data if response.data else []
     except Exception as e:
@@ -247,7 +294,9 @@ def save_message(from_user_id, to_group_id, to_user_id, content, file_path=None)
     """Сохраняет сообщение"""
     try:
         supabase = get_supabase()
-        
+        if not supabase:
+            return None
+            
         response = supabase.table('messages').insert({
             'from_user_id': from_user_id,
             'to_group_id': to_group_id,
@@ -267,7 +316,9 @@ def get_messages(chat_type, chat_id=None, user_id=None, limit=50, offset=0):
     """Получает сообщения для чата"""
     try:
         supabase = get_supabase()
-        
+        if not supabase:
+            return []
+            
         if chat_type == 'general':
             # Общий чат
             response = supabase.table('messages').select('*, users!from_user_id(username)').\
@@ -286,6 +337,8 @@ def get_messages(chat_type, chat_id=None, user_id=None, limit=50, offset=0):
                 or_(f"and(to_user_id.eq.{user_id},from_user_id.eq.{chat_id}),"
                     f"and(to_user_id.eq.{chat_id},from_user_id.eq.{user_id})").\
                 order('timestamp', desc=True).limit(limit).offset(offset).execute()
+        else:
+            return []
         
         messages = response.data if response.data else []
         return messages[::-1]  # Переворачиваем для хронологии
@@ -297,7 +350,9 @@ def get_unread_count(user_id, chat_type, chat_id=None):
     """Считает непрочитанные сообщения"""
     try:
         supabase = get_supabase()
-        
+        if not supabase:
+            return 0
+            
         if chat_type == 'general':
             response = supabase.table('messages').select('id', count='exact').\
                 is_('to_group_id', 'null').is_('to_user_id', 'null').\
@@ -310,6 +365,8 @@ def get_unread_count(user_id, chat_type, chat_id=None):
         elif chat_type == 'direct':
             response = supabase.table('messages').select('id', count='exact').\
                 eq('to_user_id', user_id).eq('from_user_id', chat_id).eq('is_read', 0).execute()
+        else:
+            return 0
         
         return response.count if hasattr(response, 'count') else 0
     except Exception as e:
@@ -320,7 +377,9 @@ def mark_messages_as_read(user_id, chat_type, chat_id=None):
     """Отмечает сообщения как прочитанные"""
     try:
         supabase = get_supabase()
-        
+        if not supabase:
+            return False
+            
         if chat_type == 'general':
             supabase.table('messages').update({'is_read': 1}).\
                 is_('to_group_id', 'null').is_('to_user_id', 'null').\
@@ -339,5 +398,5 @@ def mark_messages_as_read(user_id, chat_type, chat_id=None):
         print(f"Mark as read error: {e}")
         return False
 
-# Экспортируем имя БД для совместимости (не используется в Supabase)
+# Константа для совместимости
 DB_NAME = "supabase_cloud"
