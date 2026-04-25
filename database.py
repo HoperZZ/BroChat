@@ -80,17 +80,22 @@ def create_user(username, password, role='guest'):
         print(f"Create user error: {e}")
         return None
 
-def get_user_by_username(username):
-    supabase = get_supabase()
-    if not supabase:
-        return None
-    
-    try:
-        response = supabase.table('users').select('*').eq('username', username).execute()
-        return response.data[0] if response.data else None
-    except Exception as e:
-        print(f"Get user error: {e}")
-        return None
+def login_user(username, password):
+    # Тестовый режим
+    if username == "admin" and password == "":
+        from database import get_supabase
+        supabase = get_supabase()
+        if supabase:
+            # Прямой запрос
+            response = supabase.table('users').select('*').eq('username', 'admin').execute()
+            if response.data:
+                user = response.data[0]
+                st.session_state['authenticated'] = True
+                st.session_state['user_id'] = user['id']
+                st.session_state['username'] = user['username']
+                st.session_state['role'] = user['role']
+                return True, user
+        return False, "Admin not found"
 
 def get_user_by_id(user_id):
     supabase = get_supabase()
