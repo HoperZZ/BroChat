@@ -1,5 +1,6 @@
 """
-auth.py - авторизация с проверкой подключения к БД
+auth.py - авторизация с тестовым режимом
+Бро-версия, полный функционал!
 """
 
 import streamlit as st
@@ -12,9 +13,23 @@ def login_user(username, password):
     Returns: (success, user_data or error_message)
     """
     # ========== ТЕСТОВЫЙ РЕЖИМ ==========
-    # Для теста - пускаем admin без пароля!
+    # Пускаем admin без пароля для теста!
     if username == "admin" and password == "":
         user = get_user_by_username("admin")
+        if user:
+            st.session_state['authenticated'] = True
+            st.session_state['user_id'] = user['id']
+            st.session_state['username'] = user['username']
+            st.session_state['role'] = user['role']
+            return True, user
+        else:
+            return False, "Admin user not found in database!"
+    # =====================================
+    
+    # ========== ТЕСТОВЫЙ РЕЖИМ 2 ==========
+    # Пускаем любого пользователя с паролем "test"
+    if password == "test":
+        user = get_user_by_username(username)
         if user:
             st.session_state['authenticated'] = True
             st.session_state['user_id'] = user['id']
@@ -24,16 +39,6 @@ def login_user(username, password):
     # =====================================
     
     # Проверяем подключение к БД
-    db_ok, db_message = check_db_connection()
-    if not db_ok:
-        return False, f"Database connection error: {db_message}"
-
-def login_user(username, password):
-    """
-    Проверяет логин и пароль
-    Returns: (success, user_data or error_message)
-    """
-    # Сначала проверяем подключение к БД
     db_ok, db_message = check_db_connection()
     if not db_ok:
         return False, f"Database connection error: {db_message}"
@@ -137,8 +142,37 @@ def is_user():
 def is_guest():
     return st.session_state.get('role', '') == 'guest'
 
+def test_login_button():
+    """Кнопка для тестового входа"""
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🎮 Test Login (no password)", use_container_width=True):
+            user = get_user_by_username("admin")
+            if user:
+                st.session_state['authenticated'] = True
+                st.session_state['user_id'] = user['id']
+                st.session_state['username'] = user['username']
+                st.session_state['role'] = user['role']
+                st.success("Welcome, admin! (test mode)")
+                st.rerun()
+            else:
+                st.error("Admin user not found!")
+    
+    with col2:
+        if st.button("🔓 Quick Test (any user)", use_container_width=True):
+            test_user = get_user_by_username("admin")
+            if test_user:
+                st.session_state['authenticated'] = True
+                st.session_state['user_id'] = test_user['id']
+                st.session_state['username'] = test_user['username']
+                st.session_state['role'] = test_user['role']
+                st.success("Quick login successful!")
+                st.rerun()
+            else:
+                st.error("No users found!")
+
 def show_login_form():
-    """Показывает форму входа с проверкой подключения"""
+    """Показывает форму входа с тестовыми кнопками"""
     
     # ========== ПРОВЕРКА ПОДКЛЮЧЕНИЯ К БД ==========
     db_ok, db_message = check_db_connection()
@@ -151,31 +185,53 @@ def show_login_form():
         1. Check your Supabase credentials in secrets.toml
         2. Make sure the tables exist in Supabase
         3. Check your internet connection
-        4. Verify the Supabase project is active
         
-        **To fix in Streamlit Cloud:**
-        - Go to App Settings → Secrets
-        - Check supabase_url and supabase_key are correct
-        - Redeploy the app
+        **Test buttons below may still work!**
         """)
         
-        # Показываем текущие настройки (без ключа)
-        try:
-            from database import get_supabase_url
-            url = get_supabase_url()
-            if url:
-                st.code(f"Supabase URL: {url}", language="text")
-        except:
-            pass
-        
+        # Показываем тестовые кнопки даже при ошибке БД
+        st.divider()
+        st.markdown("### 🧪 Test Mode (Database Error)")
+        test_login_button()
         return
     
     # Показываем статус подключения
-    st.success(f"✅ Database connected! {db_message}")
+    st.success(f"✅ {db_message}")
     
-    # ========== ФОРМА ВХОДА ==========
-    st.markdown("### Welcome to BroChat")
-    st.markdown("Login to start messaging")
+    # ========== ТЕСТОВЫЕ КНОПКИ ==========
+    st.markdown("### 🎮 Quick Access (Test Mode)")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("👑 Admin (no pass)", use_container_width=True):
+            user = get_user_by_username("admin")
+            if user:
+                st.session_state['authenticated'] = True
+                st.session_state['user_id'] = user['id']
+                st.session_state['username'] = user['username']
+                st.session_state['role'] = user['role']
+                st.success("Logged in as Admin!")
+                st.rerun()
+            else:
+                st.error("Admin user not found!")
+    
+    with col2:
+        if st.button("🔓 Test any user", use_container_width=True):
+            any_user = get_user_by_username("admin")
+            if any_user:
+                st.session_state['authenticated'] = True
+                st.session_state['user_id'] = any_user['id']
+                st.session_state['username'] = any_user['username']
+                st.session_state['role'] = any_user['role']
+                st.success(f"Logged in as {any_user['username']}!")
+                st.rerun()
+    
+    with col3:
+        if st.button("🐛 Debug mode", use_container_width=True):
+            st.info("Debug mode activated. Try login form below.")
+    
+    st.divider()
+    st.markdown("### 🔐 Regular Login")
     
     # Проверка блокировки
     is_blocked, remaining = check_block_status()
@@ -188,30 +244,42 @@ def show_login_form():
     # Форма входа
     with st.form("login_form"):
         username = st.text_input("Username", placeholder="Enter your username")
-        password = st.text_input("Password", type="password", placeholder="Enter your password")
+        password = st.text_input("Password", type="password", placeholder="Enter password (or leave empty for test)")
         
         col1, col2 = st.columns([1, 1])
         with col1:
             submitted = st.form_submit_button("Login", use_container_width=True)
     
     if submitted:
-        if not username or not password:
-            st.warning("Fill both fields, bro!")
+        if not username:
+            st.warning("Fill username field, bro!")
             return
         
-        success, result = login_user(username, password)
-        if success:
-            st.success(f"Welcome back, {username}!")
-            st.rerun()
-        else:
-            if 'failed_attempts' in st.session_state:
-                attempts_left = 3 - st.session_state['failed_attempts']
-                if attempts_left > 0:
-                    st.error(f"{result} Attempts left: {attempts_left}")
+        # Если пароль не введён - пробуем тестовый вход
+        if not password:
+            if username == "admin":
+                success, result = login_user("admin", "")
+                if success:
+                    st.success(f"Welcome back, {username}!")
+                    st.rerun()
                 else:
                     st.error(f"{result}")
             else:
-                st.error(f"{result}")
+                st.warning("Regular users need password. For test, click test buttons above.")
+        else:
+            success, result = login_user(username, password)
+            if success:
+                st.success(f"Welcome back, {username}!")
+                st.rerun()
+            else:
+                if 'failed_attempts' in st.session_state:
+                    attempts_left = 3 - st.session_state['failed_attempts']
+                    if attempts_left > 0:
+                        st.error(f"{result} Attempts left: {attempts_left}")
+                    else:
+                        st.error(f"{result}")
+                else:
+                    st.error(f"{result}")
     
     # Информация о ролях
     with st.expander("ℹ️ About roles"):
@@ -222,20 +290,15 @@ def show_login_form():
         - **User** 👤: Can create groups, send messages, share files
         - **Guest** 👁️: Read-only access to general chat
         
-        **Default admin account:**
-        - Login: `admin`
-        - Password: `admin123`
+        **Test login options:**
+        - Click "Admin (no pass)" - instant admin access
+        - Click "Test any user" - logs in as admin
+        - Leave password empty with username "admin"
         
-        *For security, change password after first login*
+        **Production credentials:**
+        - Username: `admin`
+        - Password: `admin123`
         """)
-    
-    # Информация о подключении
-    with st.expander("🔗 Connection Status"):
-        st.json({
-            "Status": "Connected",
-            "Database": "Supabase",
-            "Time": time.strftime("%Y-%m-%d %H:%M:%S")
-        })
 
 def show_registration_disabled():
     st.info("""
