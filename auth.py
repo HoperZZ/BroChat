@@ -1,17 +1,21 @@
 """
-auth.py - авторизация, сессии, блокировки
-Bro version, clean and stable
+auth.py - авторизация с проверкой подключения к БД
 """
 
 import streamlit as st
 import time
-from database import verify_password, get_user_by_username
+from database import verify_password, get_user_by_username, check_db_connection
 
 def login_user(username, password):
     """
     Проверяет логин и пароль
     Returns: (success, user_data or error_message)
     """
+    # Сначала проверяем подключение к БД
+    db_ok, db_message = check_db_connection()
+    if not db_ok:
+        return False, f"Database connection error: {db_message}"
+    
     # Проверяем блокировку
     block_status, remaining = check_block_status()
     if block_status:
@@ -22,16 +26,12 @@ def login_user(username, password):
     user = get_user_by_username(username)
     
     if not user:
-        # Неправильный логин
         increment_failed_attempts()
         return False, "Invalid username or password!"
     
-    # Проверяем пароль
     if verify_password(password, user['password_hash']):
-        # Успешный вход! Сбрасываем попытки
         reset_failed_attempts()
         
-        # Сохраняем в сессию
         st.session_state['authenticated'] = True
         st.session_state['user_id'] = user['id']
         st.session_state['username'] = user['username']
@@ -39,12 +39,11 @@ def login_user(username, password):
         
         return True, user
     else:
-        # Неправильный пароль
         increment_failed_attempts()
         return False, "Invalid username or password!"
 
 def logout():
-    """Выход из системы - чистим сессию"""
+    """Выход из системы"""
     keys_to_remove = ['authenticated', 'user_id', 'username', 'role', 
                       'failed_attempts', 'block_until', 'active_chat', 'manage_group']
     for key in keys_to_remove:
@@ -52,63 +51,49 @@ def logout():
             del st.session_state[key]
 
 def increment_failed_attempts():
-    """Увеличиваем счетчик неудачных попыток"""
     if 'failed_attempts' not in st.session_state:
         st.session_state['failed_attempts'] = 0
     
     st.session_state['failed_attempts'] += 1
     
-    # Если 3 попытки - блокируем на 15 минут
     if st.session_state['failed_attempts'] >= 3:
-        st.session_state['block_until'] = time.time() + 900  # 900 секунд = 15 минут
+        st.session_state['block_until'] = time.time() + 900
 
 def reset_failed_attempts():
-    """Сбрасываем счетчик попыток"""
     st.session_state['failed_attempts'] = 0
     if 'block_until' in st.session_state:
         del st.session_state['block_until']
 
 def check_block_status():
-    """
-    Проверяет, заблокирован ли пользователь
-    Returns: (is_blocked, remaining_seconds)
-    """
-    # Если нет данных о блокировке - не заблокирован
     if 'block_until' not in st.session_state:
         return False, 0
     
     block_until = st.session_state['block_until']
     
-    # Если значение None или не число - сбрасываем
     if block_until is None or not isinstance(block_until, (int, float)):
         reset_failed_attempts()
         return False, 0
     
     current_time = time.time()
     
-    # Если время блокировки еще не прошло
     if current_time < block_until:
         remaining = int(block_until - current_time)
         return True, remaining
     else:
-        # Блокировка истекла
         reset_failed_attempts()
         return False, 0
 
 def get_block_remaining_time():
-    """Возвращает оставшееся время блокировки в секундах"""
     is_blocked, remaining = check_block_status()
     return remaining if is_blocked else 0
 
 def require_auth():
-    """Проверка авторизации для защищенных страниц"""
     if not st.session_state.get('authenticated', False):
         st.warning("Please login first, bro!")
         st.stop()
     return True
 
 def require_role(required_role):
-    """Проверяет, есть ли у пользователя нужная роль"""
     if not st.session_state.get('authenticated', False):
         st.warning("Please login first!")
         st.stop()
@@ -121,20 +106,52 @@ def require_role(required_role):
     return True
 
 def is_admin():
-    """Проверяет, является ли текущий пользователь админом"""
     return st.session_state.get('role', '') == 'admin'
 
 def is_user():
-    """Проверяет, является ли текущий пользователь обычным пользователем"""
     role = st.session_state.get('role', '')
     return role == 'user' or role == 'admin'
 
 def is_guest():
-    """Проверяет, является ли текущий пользователь гостем"""
     return st.session_state.get('role', '') == 'guest'
 
 def show_login_form():
-    """Показывает форму входа"""
+    """Показывает форму входа с проверкой подключения"""
+    
+    # ========== ПРОВЕРКА ПОДКЛЮЧЕНИЯ К БД ==========
+    db_ok, db_message = check_db_connection()
+    
+    if not db_ok:
+        st.error("❌ Database Connection Failed!")
+        st.warning(f"**Error:** {db_message}")
+        st.info("""
+        **Possible solutions:**
+        1. Check your Supabase credentials in secrets.toml
+        2. Make sure the tables exist in Supabase
+        3. Check your internet connection
+        4. Verify the Supabase project is active
+        
+        **To fix in Streamlit Cloud:**
+        - Go to App Settings → Secrets
+        - Check supabase_url and supabase_key are correct
+        - Redeploy the app
+        """)
+        
+        # Показываем текущие настройки (без ключа)
+        try:
+            from database import get_supabase_url
+            url = get_supabase_url()
+            if url:
+                st.code(f"Supabase URL: {url}", language="text")
+        except:
+            pass
+        
+        return
+    
+    # Показываем статус подключения
+    st.success(f"✅ Database connected! {db_message}")
+    
+    # ========== ФОРМА ВХОДА ==========
     st.markdown("### Welcome to BroChat")
     st.markdown("Login to start messaging")
     
@@ -165,7 +182,6 @@ def show_login_form():
             st.success(f"Welcome back, {username}!")
             st.rerun()
         else:
-            # Показываем количество оставшихся попыток
             if 'failed_attempts' in st.session_state:
                 attempts_left = 3 - st.session_state['failed_attempts']
                 if attempts_left > 0:
@@ -180,9 +196,9 @@ def show_login_form():
         st.markdown("""
         **Roles in BroChat:**
         
-        - **Admin** : Full control, can add/remove users, manage roles
-        - **User** : Can create groups, send messages, share files
-        - **Guest** : Read-only access to general chat
+        - **Admin** 👑: Full control, can add/remove users, manage roles
+        - **User** 👤: Can create groups, send messages, share files
+        - **Guest** 👁️: Read-only access to general chat
         
         **Default admin account:**
         - Login: `admin`
@@ -191,11 +207,15 @@ def show_login_form():
         *For security, change password after first login*
         """)
     
-    # Советы
-    st.caption("Tip: First launch creates admin account automatically")
+    # Информация о подключении
+    with st.expander("🔗 Connection Status"):
+        st.json({
+            "Status": "Connected",
+            "Database": "Supabase",
+            "Time": time.strftime("%Y-%m-%d %H:%M:%S")
+        })
 
 def show_registration_disabled():
-    """Сообщение о том, что регистрация только через админа"""
     st.info("""
     **Registration is admin-only**
     
@@ -204,9 +224,7 @@ def show_registration_disabled():
     If you need an account, contact the admin.
     """)
 
-# Функция для отображения текущего статуса пользователя
 def show_user_status():
-    """Показывает статус текущего пользователя в sidebar"""
     if st.session_state.get('authenticated', False):
         role = st.session_state['role']
         role_icon = "👑" if role == 'admin' else "👤" if role == 'user' else "👁️"
@@ -219,29 +237,3 @@ def show_user_status():
         Role: {role_name}
         ---
         """)
-
-# Тестовая функция для проверки (только для дебага)
-if __name__ == "__main__":
-    # Заглушка для тестирования
-    if 'session_state' not in st.__dict__:
-        st.session_state = {}
-    
-    st.title("Auth Module Test")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        show_login_form()
-    with col2:
-        st.markdown("### Current Session State")
-        st.json({
-            'authenticated': st.session_state.get('authenticated', False),
-            'username': st.session_state.get('username', None),
-            'role': st.session_state.get('role', None),
-            'failed_attempts': st.session_state.get('failed_attempts', 0),
-            'block_until': st.session_state.get('block_until', None)
-        })
-        
-        if st.session_state.get('authenticated', False):
-            if st.button("Logout"):
-                logout()
-                st.rerun()
