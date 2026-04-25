@@ -1,10 +1,10 @@
 """
 main.py - Точка входа мессенджера BroChat
-Бро-версия, полный функционал
+Бро-версия, полный функционал с автосозданием админа
 """
 
 import streamlit as st
-from database import init_db
+from database import init_db, create_admin_if_not_exists, check_db_connection
 from auth import show_login_form, logout
 from admin import render_admin_section
 from chat import show_chat_interface, show_group_management
@@ -176,9 +176,11 @@ def main():
     # Инициализация БД с обработкой ошибок
     try:
         init_db()
+        # ПРИНУДИТЕЛЬНО СОЗДАЁМ АДМИНА ЕСЛИ НЕТ
+        create_admin_if_not_exists()
     except Exception as e:
         st.error(f"Database init error: {str(e)}")
-        st.info("Make sure you have write permissions in current directory")
+        st.info("Make sure you have write permissions and Supabase is configured")
         return
     
     apply_mobile_styles()
@@ -200,6 +202,14 @@ def main():
         
         # Гостевой режим
         show_guest_mode()
+        
+        # Показываем статус подключения к БД для отладки
+        with st.expander("🔧 System Status", expanded=False):
+            db_ok, db_msg = check_db_connection()
+            if db_ok:
+                st.success(f"✅ {db_msg}")
+            else:
+                st.error(f"❌ {db_msg}")
         
     else:
         # Основной интерфейс для авторизованных
@@ -259,7 +269,7 @@ if __name__ == "__main__":
         - chat.py
         
         Install dependencies:
-        pip install streamlit bcrypt pillow
+        pip install streamlit bcrypt pillow supabase
         
         Run:
         streamlit run main.py
